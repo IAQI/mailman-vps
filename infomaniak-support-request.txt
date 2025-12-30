@@ -1,0 +1,42 @@
+Subject: SMTP Sender Mismatch with GNU Mailman Mailing List Software
+
+Dear Infomaniak Support,
+
+We are running GNU Mailman 3 mailing list software on a VPS, using Infomaniak Email Service for mail delivery. Our setup is based on the mailman-cloud project referenced in your knowledge base: https://github.com/reneluria/mailman-cloud
+
+THE PROBLEM:
+
+All outgoing list messages are rejected with "550 5.7.1 Sender mismatch" because:
+
+- We authenticate to mail.infomaniak.com:587 as mailman@iaqi.org
+- The envelope sender (MAIL FROM) is correctly set to mailman@iaqi.org
+- However, the From header contains the original message sender (e.g., user@gmail.com)
+- Infomaniak validates BOTH envelope AND From header for consistency
+
+This is standard mailing list behavior - lists redistribute messages from various senders while using a consistent envelope sender for bounce handling.
+
+OUR CURRENT WORKAROUND:
+
+We rewrite ALL From headers to "mailman@iaqi.org" using Postfix smtp_header_checks. This works but has drawbacks:
+- Recipients cannot see who originally sent the message in the From field
+- Email replies go to mailman@iaqi.org instead of the list or original sender
+- Subscription/unsubscription confirmations require manual email composition
+
+WHAT WOULD HELP:
+
+1. Allow authenticated SMTP accounts to send with different From headers (common for mailing lists, CRM systems, and transactional email)
+
+2. Or provide a "mailing list mode" flag for email accounts that relaxes the From header validation while keeping envelope sender validation
+
+3. Or document the exact validation rules so we can configure Mailman appropriately
+
+TECHNICAL DETAILS:
+
+- Domain: iaqi.org (list.iaqi.org for mailing lists)
+- Authenticated account: mailman@iaqi.org
+- SMTP server: mail.infomaniak.com:587 with STARTTLS
+- Software: GNU Mailman 3 + Postfix on Debian
+
+We would appreciate any guidance on how to properly configure mailing list software with Infomaniak Email Service.
+
+Thank you for your support.

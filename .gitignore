@@ -1,7 +1,12 @@
 .envrc
 *-openrc.sh
+*-openrc.txt
 id_*
 terraform/.terraform*
 *.tfstate*
 inventory
 ssh-agent.sh
+*.code-workspace
+mailman-key.txt
+.vscode/
+.claude/

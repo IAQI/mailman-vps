@@ -5,23 +5,23 @@
   vars:
 
     relayhost: "[mail.infomaniak.com]:submission"
-    mailman_web_proto: http
+    mailman_web_proto: https
 
   tasks:
 
-    - name: check openstack variables
-      assert:
-        that:
-          - lookup('env', '{{ item }}') != ''
-        fail_msg: "Please define {{ item }} environment variable"
-      loop:
-        - OS_AUTH_URL
-        - OS_PROJECT_NAME
-        - OS_USER_DOMAIN_NAME
-        - OS_USERNAME
-        - OS_PASSWORD
-        - OS_REGION_NAME
-        - OS_IDENTITY_API_VERSION
+    # - name: check openstack variables
+    #   assert:
+    #     that:
+    #       - lookup('env', '{{ item }}') != ''
+    #     fail_msg: "Please define {{ item }} environment variable"
+    #   loop:
+    #     - OS_AUTH_URL
+    #     - OS_PROJECT_NAME
+    #     - OS_USER_DOMAIN_NAME
+    #     - OS_USERNAME
+    #     - OS_PASSWORD
+    #     - OS_REGION_NAME
+    #     - OS_IDENTITY_API_VERSION
 
     - name: check inventory variables
       assert:
@@ -34,6 +34,12 @@
           - mailman_password is defined
           - mailman_domain is defined
           - mailman_email is defined
+
+    - name: install debconf-utils
+      apt:
+        name: debconf-utils
+        update_cache: true
+        state: present
 
     - name: "postfix debconf"
       debconf:
@@ -87,12 +93,21 @@
           vtype: boolean
           value: true
 
+    - name: remove bullseye-backports repository
+      lineinfile:
+        path: /etc/apt/sources.list
+        regexp: '.*bullseye-backports.*'
+        state: absent
+
     - name: install packages
       apt:
         name:
           - postfix
           - mailman3-full
           - fetchmail
+          - certbot
+          - python3-certbot-apache
+          - libsasl2-modules
         update_cache: true
         state: present
 
@@ -143,12 +158,38 @@
         marker: "# {mark} ANSIBLE MANAGED BLOCK - mailman"
       notify: restart postfix
 
+    - name: postfix sender rewriting for relay
+      blockinfile:
+        path: /etc/postfix/main.cf
+        block: |
+          smtp_generic_maps = regexp:/etc/postfix/smtp_generic
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - sender rewriting"
+      notify: restart postfix
+
+    - name: create smtp generic map
+      copy:
+        dest: /etc/postfix/smtp_generic
+        content: |
+          /@list\.iaqi\.org$/    {{ mail_account }}
+      notify: restart postfix
+
     # mailman
     - name: mailman site owner
       lineinfile:
         path: /etc/mailman3/mailman.cfg
         line: "site_owner: {{ mailman_email }}"
         regexp: "^site_owner:.*"
+      notify: restart mailman
+
+    - name: ensure mailman list defaults section exists
+      blockinfile:
+        path: /etc/mailman3/mailman.cfg
+        block: |
+          [list.defaults]
+          # Default delivery status for new members
+          delivery_status: enabled
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - list defaults"
+        insertafter: EOF
       notify: restart mailman
 
     # fetchmail
@@ -184,6 +225,49 @@
           ACCOUNT_DEFAULT_HTTP_PROTOCOL = "{{ mailman_web_proto }}"
         regex: "^ACCOUNT_DEFAULT_HTTP_PROTOCOL.*"
       notify: restart mailman3-web
+
+    # apache configuration
+    - name: disable default apache site
+      command: a2dissite 000-default
+      args:
+        removes: /etc/apache2/sites-enabled/000-default.conf
+      notify: restart apache
+
+    - name: create mailman virtualhost
+      copy:
+        dest: /etc/apache2/sites-available/mailman3-vhost.conf
+        content: |
+          <VirtualHost *:80>
+              ServerName {{ fqdn }}
+              
+              Alias /static /var/lib/mailman3/web/static
+              <Directory "/var/lib/mailman3/web/static">
+                  Require all granted
+              </Directory>
+
+              <IfModule mod_proxy_uwsgi.c>
+                  ProxyPass /static !
+                  ProxyPass / unix:/run/mailman3-web/uwsgi.sock|uwsgi://localhost/
+              </IfModule>
+
+              ErrorLog ${APACHE_LOG_DIR}/mailman3-error.log
+              CustomLog ${APACHE_LOG_DIR}/mailman3-access.log combined
+          </VirtualHost>
+      notify: restart apache
+
+    - name: enable mailman virtualhost
+      command: a2ensite mailman3-vhost
+      args:
+        creates: /etc/apache2/sites-enabled/mailman3-vhost.conf
+      notify: restart apache
+
+    - name: obtain letsencrypt certificate
+      command: >
+        certbot --apache --non-interactive --agree-tos --email {{ mailman_email }}
+        --domains {{ fqdn }} --redirect
+      args:
+        creates: /etc/letsencrypt/live/{{ fqdn }}/fullchain.pem
+      notify: restart apache
 
   handlers:
     - name: restart postfix
