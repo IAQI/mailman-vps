@@ -2,7 +2,7 @@ Subject: SMTP Sender Mismatch with GNU Mailman Mailing List Software
 
 Dear Infomaniak Support,
 
-We are running GNU Mailman 3 mailing list software on a VPS, using Infomaniak Email Service for mail delivery. Our setup is based on the mailman-cloud project referenced in your knowledge base: https://github.com/reneluria/mailman-cloud
+We are running GNU Mailman 3 mailing list software on a VPS, using Infomaniak Email Service for mail delivery. Our setup at https://github.com/IAQI/mailman-vps is based on the mailman-cloud project referenced in your knowledge base: https://github.com/reneluria/mailman-cloud at https://www.infomaniak.com/en/support/faq/2612/under-construction#:~:text=Deploy%20the%20instance%20that%20will,client 
 
 THE PROBLEM:
 
